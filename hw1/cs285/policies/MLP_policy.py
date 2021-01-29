@@ -9,8 +9,8 @@ import numpy as np
 import torch
 from torch import distributions
 
-from cs285.infrastructure import pytorch_util as ptu
-from cs285.policies.base_policy import BasePolicy
+from infrastructure import pytorch_util as ptu
+from .base_policy import BasePolicy
 
 
 class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
@@ -59,7 +59,8 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             )
             self.mean_net.to(ptu.device)
             self.logstd = nn.Parameter(
-                torch.zeros(self.ac_dim, dtype=torch.float32, device=ptu.device)
+                torch.zeros(self.ac_dim, dtype=torch.float32,
+                            device=ptu.device)
             )
             self.logstd.to(ptu.device)
             self.optimizer = optim.Adam(
@@ -81,9 +82,13 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             observation = obs[None]
 
         # TODO return the action that the policy prescribes
-        raise NotImplementedError
+        observation = torch.from_numpy(observation).to(torch.float32)
+        action_dist = self.forward(observation)
+        return action_dist.sample().numpy()
+        # raise NotImplementedError
 
     # update/train this policy
+
     def update(self, observations, actions, **kwargs):
         raise NotImplementedError
 
@@ -93,7 +98,14 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
     # return more flexible objects, such as a
     # `torch.distributions.Distribution` object. It's up to you!
     def forward(self, observation: torch.FloatTensor) -> Any:
-        raise NotImplementedError
+        if self.discrete:
+            action_probs = self.logits_na(observation)
+            return distributions.Categorical(action_probs)
+        else:
+            mean = self.mean_net(observation)
+            dist = distributions.Normal(
+                loc=mean, scale=torch.exp(self.logstd))
+            return dist
 
 
 #####################################################
@@ -109,7 +121,12 @@ class MLPPolicySL(MLPPolicy):
             adv_n=None, acs_labels_na=None, qvals=None
     ):
         # TODO: update the policy and return the loss
-        loss = TODO
+        pred_actions = torch.from_numpy(
+            np.array([self.get_action(observation) for observation in observations])).to(torch.float32)
+        # this will give a 1D tensor with the actual summed loss
+        loss = self.loss(pred_actions, actions, reduction='none')
+        loss.backward()
+        self.optimizer.step()
         return {
             # You can add extra logging information here, but keep this line
             'Training Loss': ptu.to_numpy(loss),
