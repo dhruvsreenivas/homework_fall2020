@@ -121,6 +121,7 @@ class MLPPolicySL(MLPPolicy):
             adv_n=None, acs_labels_na=None, qvals=None
     ):
         # TODO: update the policy and return the loss
+        self.optimizer.zero_grad()
         pred_actions = torch.from_numpy(
             np.array([self.get_action(observation) for observation in observations])).to(torch.float32)
         # this will give a 1D tensor with the actual summed loss
